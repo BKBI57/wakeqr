@@ -1,0 +1,64 @@
+name: WakeQR
+options:
+  bundleIdPrefix: com.bkbi
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGNING_ALLOWED: "NO"
+
+targets:
+  WakeQR:
+    type: application
+    platform: iOS
+    sources:
+      - path: WakeQR
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bkbi.wakeqr
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+    info:
+      path: WakeQR/Info.plist
+      properties:
+        CFBundleDisplayName: WakeQR
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [audio]
+        NSSupportsLiveActivities: true
+        NSCameraUsageDescription: "WakeQR needs the camera to scan the QR code that stops the alarm."
+        NSAlarmKitUsageDescription: "WakeQR schedules your wake-up alarm."
+    dependencies:
+      - target: WakeQRWidget
+
+  WakeQRWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: WakeQRWidget
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.bkbi.wakeqr.widget
+        SKIP_INSTALL: "YES"
+    info:
+      path: WakeQRWidget/Info.plist
+      properties:
+        CFBundleDisplayName: WakeQRWidget
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+schemes:
+  WakeQR:
+    build:
+      targets:
+        WakeQR: all
+    archive:
+      config: Release
