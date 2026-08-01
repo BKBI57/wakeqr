@@ -25,8 +25,22 @@ final class AppModel: ObservableObject {
     @Published var alarmVolume: Double {
         didSet { UserDefaults.standard.set(alarmVolume, forKey: "alarmVolume") }
     }
+    /// Selected alarm tone (base name of a bundled wav, no extension).
+    @Published var alarmSound: String {
+        didSet { UserDefaults.standard.set(alarmSound, forKey: "alarmSound") }
+    }
+
+    /// Bundled tones: (file base name, Arabic label).
+    static let sounds: [(id: String, label: String)] = [
+        ("alarm_classic", "كلاسيكي"),
+        ("alarm_siren", "سارينة"),
+        ("alarm_bell", "جرس"),
+        ("alarm_digital", "ديجيتال"),
+    ]
     /// true when the iOS 26 AlarmKit system alarm was successfully authorized+scheduled (Plan A).
     @Published private(set) var alarmKitActive = false
+    /// true while a tone preview is playing on the setup screen.
+    @Published private(set) var previewing = false
 
     private let audio = AlarmAudioEngine()
     private var ticker: Timer?
@@ -37,6 +51,7 @@ final class AppModel: ObservableObject {
         alarmHour = d.object(forKey: "alarmHour") as? Int ?? 7
         alarmMinute = d.object(forKey: "alarmMinute") as? Int ?? 0
         alarmVolume = d.object(forKey: "alarmVolume") as? Double ?? 1.0
+        alarmSound = d.string(forKey: "alarmSound") ?? "alarm_classic"
     }
 
     /// Called once at launch.
@@ -77,26 +92,36 @@ final class AppModel: ObservableObject {
         return cal.nextDate(after: date, matching: c, matchingPolicy: .nextTime) ?? date.addingTimeInterval(60)
     }
 
+    /// Play/stop a short preview of the currently selected tone (setup screen).
+    func togglePreview() {
+        previewing = audio.togglePreview(soundNamed: alarmSound, volume: Float(alarmVolume))
+    }
+
     // MARK: - Sleep mode (Plan B core)
 
     func enterSleepMode() {
+        audio.stopPreview()
+        previewing = false
         let fire = Self.nextOccurrence(hour: alarmHour, minute: alarmMinute)
         nextFireDate = fire
         UserDefaults.standard.set(fire, forKey: "nextFireDate")
 
         AVCaptureDevice.requestAccess(for: .video) { _ in }   // make sure camera is usable in the morning
         audio.startKeepAlive()                                 // keeps the app alive in background
-        NotificationScheduler.scheduleSafetyNet(at: fire)      // fires even if the app is killed
+        NotificationScheduler.scheduleSafetyNet(at: fire, sound: alarmSound) // fires even if the app is killed
         UIApplication.shared.isIdleTimerDisabled = true
         phase = .sleeping
         startTicker()
 
-        // Plan A, best effort: also register a real system alarm via AlarmKit.
-        // If authorization/entitlement fails (likely with free signing) we just stay on Plan B.
+        // Plan A, best effort: also register a real AlarmKit system alarm — but 3 minutes AFTER
+        // the in-app alarm. It is a backup for the killed-app case only; its mandatory X (stop)
+        // button must never be the thing that silences the real ringing. If the QR is scanned
+        // within those 3 minutes it gets cancelled and never fires.
+        let backup = fire.addingTimeInterval(3 * 60)
+        let bc = Calendar.current.dateComponents([.hour, .minute], from: backup)
         Task { [weak self] in
             guard let self else { return }
-            let h = self.alarmHour, m = self.alarmMinute
-            self.alarmKitActive = await AlarmKitBridge.scheduleDaily(hour: h, minute: m)
+            self.alarmKitActive = await AlarmKitBridge.scheduleDaily(hour: bc.hour ?? 0, minute: bc.minute ?? 0)
         }
     }
 
@@ -124,8 +149,12 @@ final class AppModel: ObservableObject {
     private func startRinging() {
         ticker?.invalidate()
         UIApplication.shared.isIdleTimerDisabled = true
-        audio.startAlarm(volume: Float(alarmVolume))
+        audio.startAlarm(soundNamed: alarmSound, volume: Float(alarmVolume))
         phase = .ringing
+        // The app itself is now the alarm, so push the notification safety net 90s into the
+        // future: no notification sounds stacking on top of the ringing (the noise-mush issue),
+        // but if the app gets force-quit the net still kicks in within a minute and a half.
+        NotificationScheduler.scheduleSafetyNet(at: Date().addingTimeInterval(90), sound: alarmSound)
     }
 
     /// Returns true only for the correct payload; the alarm keeps ringing otherwise.

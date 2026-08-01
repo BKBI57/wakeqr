@@ -20,6 +20,29 @@ struct SetAlarmView: View {
                 .labelsHidden()
                 .environment(\.locale, Locale(identifier: "ar"))
 
+            VStack(spacing: 10) {
+                HStack {
+                    Text("نغمة المنبّه")
+                        .font(.subheadline.bold())
+                    Spacer()
+                    Button {
+                        model.togglePreview()
+                    } label: {
+                        Label(model.previewing ? "إيقاف" : "تجربة",
+                              systemImage: model.previewing ? "stop.circle.fill" : "play.circle.fill")
+                            .font(.subheadline.bold())
+                    }
+                    .tint(.orange)
+                }
+                Picker("نغمة المنبّه", selection: $model.alarmSound) {
+                    ForEach(AppModel.sounds, id: \.id) { sound in
+                        Text(sound.label).tag(sound.id)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+            .padding(.horizontal, 28)
+
             VStack(spacing: 6) {
                 HStack {
                     Text("قوة صوت المنبّه")

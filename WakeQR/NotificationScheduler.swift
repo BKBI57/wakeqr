@@ -16,14 +16,14 @@ enum NotificationScheduler {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
-    static func scheduleSafetyNet(at fireDate: Date) {
+    static func scheduleSafetyNet(at fireDate: Date, sound: String) {
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
 
         let content = UNMutableNotificationContent()
         content.title = "استيقظ! ⏰"
         content.body = "افتح WakeQR وامسح رمز QR لإيقاف المنبه"
-        content.sound = UNNotificationSound(named: UNNotificationSoundName("alarm.wav"))
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("\(sound).wav"))
         content.interruptionLevel = .timeSensitive
 
         var offsets: [TimeInterval] = []

@@ -12,8 +12,10 @@ import UIKit
 final class AlarmAudioEngine {
 
     private var player: AVAudioPlayer?
+    private var previewPlayer: AVAudioPlayer?
     private var volumeTimer: Timer?
     private var alarmVolume: Float = 1.0
+    private var alarmSound = "alarm_classic"
     private var alarmActive = false
 
     init() {
@@ -44,7 +46,8 @@ final class AlarmAudioEngine {
         player?.play()
     }
 
-    func startAlarm(volume: Float) {
+    func startAlarm(soundNamed sound: String, volume: Float) {
+        alarmSound = sound
         alarmVolume = min(max(volume, 0.3), 1.0)
         alarmActive = true
         playAlarmSound()
@@ -72,12 +75,33 @@ final class AlarmAudioEngine {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch { }
-        guard let u = url("alarm") else { return }
+        guard let u = url(alarmSound) else { return }
         player?.stop()
         player = try? AVAudioPlayer(contentsOf: u)
         player?.numberOfLoops = -1
         player?.volume = alarmVolume
         player?.play()
+    }
+
+    /// Short in-app preview of a tone (setup screen). Toggles off when called for a playing tone.
+    func togglePreview(soundNamed sound: String, volume: Float) -> Bool {
+        if previewPlayer?.isPlaying == true {
+            previewPlayer?.stop()
+            previewPlayer = nil
+            return false
+        }
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        try? AVAudioSession.sharedInstance().setActive(true)
+        guard let u = url(sound) else { return false }
+        previewPlayer = try? AVAudioPlayer(contentsOf: u)
+        previewPlayer?.volume = min(max(volume, 0.3), 1.0)
+        previewPlayer?.play()
+        return true
+    }
+
+    func stopPreview() {
+        previewPlayer?.stop()
+        previewPlayer = nil
     }
 
     func stopAll() {
@@ -86,6 +110,8 @@ final class AlarmAudioEngine {
         volumeTimer = nil
         player?.stop()
         player = nil
+        previewPlayer?.stop()
+        previewPlayer = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 
