@@ -11,8 +11,8 @@ struct SleepModeView: View {
 
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 Text(context.date, format: .dateTime.hour().minute())
-                    .font(.system(size: 56, weight: .light, design: .rounded))
-                    .foregroundStyle(Color(white: 0.35))
+                    .font(.system(size: 72, weight: .light, design: .rounded))
+                    .foregroundStyle(Color(white: 0.85))
                     .monospacedDigit()
             }
 
@@ -23,12 +23,12 @@ struct SleepModeView: View {
                     Image(systemName: "checkmark.seal.fill")
                 }
             }
-            .font(.subheadline)
-            .foregroundStyle(Color(white: 0.25))
+            .font(.title3)
+            .foregroundStyle(Color(white: 0.6))
 
             Text("اترك التطبيق مفتوحًا والشاحن موصولًا 🔌")
-                .font(.footnote)
-                .foregroundStyle(Color(white: 0.2))
+                .font(.subheadline)
+                .foregroundStyle(Color(white: 0.5))
 
             Spacer()
 
@@ -36,7 +36,7 @@ struct SleepModeView: View {
                 model.cancelSleepMode()
             }
             .font(.footnote)
-            .foregroundStyle(Color(white: 0.25))
+            .foregroundStyle(Color(white: 0.45))
             .padding(.bottom, 30)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The ringing screen. No stop button, no snooze, no way out.
 /// The ONLY exit is scanning the QR code whose payload equals AppModel.qrPayload.
@@ -47,6 +48,9 @@ struct RingingView: View {
         )
         .statusBarHidden()
         .persistentSystemOverlays(.hidden)
-        .onAppear { pulse = true }
+        .onAppear {
+            pulse = true
+            UIScreen.main.brightness = 1.0
+        }
     }
 }

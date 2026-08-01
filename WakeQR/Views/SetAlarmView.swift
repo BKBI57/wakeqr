@@ -20,6 +20,30 @@ struct SetAlarmView: View {
                 .labelsHidden()
                 .environment(\.locale, Locale(identifier: "ar"))
 
+            VStack(spacing: 6) {
+                HStack {
+                    Text("قوة صوت المنبّه")
+                        .font(.subheadline.bold())
+                    Spacer()
+                    Text("\(Int(model.alarmVolume * 100))٪")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                HStack(spacing: 10) {
+                    Image(systemName: "speaker.wave.1.fill")
+                        .foregroundStyle(.secondary)
+                    Slider(value: $model.alarmVolume, in: 0.3...1.0, step: 0.05)
+                        .tint(.indigo)
+                    Image(systemName: "speaker.wave.3.fill")
+                        .foregroundStyle(.secondary)
+                }
+                Text("أثناء الرنين يثبّت التطبيق الصوت على هذا المستوى — أزرار الصوت لن تخفضه")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 28)
+
             Button {
                 model.enterSleepMode()
             } label: {

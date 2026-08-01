@@ -21,6 +21,10 @@ final class AppModel: ObservableObject {
     @Published var alarmMinute: Int {
         didSet { UserDefaults.standard.set(alarmMinute, forKey: "alarmMinute") }
     }
+    /// Alarm loudness (0.3 ... 1.0). Applied to the player AND pushed to the system volume while ringing.
+    @Published var alarmVolume: Double {
+        didSet { UserDefaults.standard.set(alarmVolume, forKey: "alarmVolume") }
+    }
     /// true when the iOS 26 AlarmKit system alarm was successfully authorized+scheduled (Plan A).
     @Published private(set) var alarmKitActive = false
 
@@ -32,6 +36,7 @@ final class AppModel: ObservableObject {
         let d = UserDefaults.standard
         alarmHour = d.object(forKey: "alarmHour") as? Int ?? 7
         alarmMinute = d.object(forKey: "alarmMinute") as? Int ?? 0
+        alarmVolume = d.object(forKey: "alarmVolume") as? Double ?? 1.0
     }
 
     /// Called once at launch.
@@ -119,7 +124,7 @@ final class AppModel: ObservableObject {
     private func startRinging() {
         ticker?.invalidate()
         UIApplication.shared.isIdleTimerDisabled = true
-        audio.startAlarm()
+        audio.startAlarm(volume: Float(alarmVolume))
         phase = .ringing
     }
 

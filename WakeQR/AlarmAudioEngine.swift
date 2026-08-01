@@ -6,16 +6,32 @@ import UIKit
 /// Plan B audio core.
 /// Keep-alive: loops a near-silent file with the `audio` background mode so iOS never suspends us.
 /// Alarm: loops the loud alarm file with `.playback` category, which plays over the silent switch.
+/// While the alarm is active, nothing on the phone stops it except AppModel (i.e. the QR scan):
+/// dismissing notifications, opening other apps, or locking the screen leave it ringing,
+/// and system audio interruptions (calls etc.) restart it automatically.
 final class AlarmAudioEngine {
 
     private var player: AVAudioPlayer?
     private var volumeTimer: Timer?
+    private var alarmVolume: Float = 1.0
+    private var alarmActive = false
+
+    init() {
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] note in
+            self?.handleInterruption(note)
+        }
+    }
 
     private func url(_ name: String) -> URL? {
         Bundle.main.url(forResource: name, withExtension: "wav")
     }
 
     func startKeepAlive() {
+        alarmActive = false
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
             try AVAudioSession.sharedInstance().setActive(true)
@@ -28,7 +44,29 @@ final class AlarmAudioEngine {
         player?.play()
     }
 
-    func startAlarm() {
+    func startAlarm(volume: Float) {
+        alarmVolume = min(max(volume, 0.3), 1.0)
+        alarmActive = true
+        playAlarmSound()
+
+        // Re-push the media volume to the chosen level every few seconds (Alarmy-style),
+        // so the volume buttons can't silence the alarm.
+        pushSystemVolume()
+        volumeTimer?.invalidate()
+        let t = Timer(timeInterval: 3.0, repeats: true) { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.pushSystemVolume()
+                // Belt and suspenders: if anything stopped playback, restart it.
+                if let self, self.alarmActive, self.player?.isPlaying != true {
+                    self.playAlarmSound()
+                }
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        volumeTimer = t
+    }
+
+    private func playAlarmSound() {
         do {
             // Drop .mixWithOthers so the alarm takes over the audio route at full force.
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
@@ -38,20 +76,12 @@ final class AlarmAudioEngine {
         player?.stop()
         player = try? AVAudioPlayer(contentsOf: u)
         player?.numberOfLoops = -1
-        player?.volume = 1.0
+        player?.volume = alarmVolume
         player?.play()
-
-        // Re-push the media volume to max every few seconds (Alarmy-style).
-        maxOutSystemVolume()
-        volumeTimer?.invalidate()
-        let t = Timer(timeInterval: 3.0, repeats: true) { [weak self] _ in
-            DispatchQueue.main.async { self?.maxOutSystemVolume() }
-        }
-        RunLoop.main.add(t, forMode: .common)
-        volumeTimer = t
     }
 
     func stopAll() {
+        alarmActive = false
         volumeTimer?.invalidate()
         volumeTimer = nil
         player?.stop()
@@ -59,16 +89,28 @@ final class AlarmAudioEngine {
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 
-    /// Sets the system media volume to 1.0 via MPVolumeView's slider (works while foregrounded).
-    private func maxOutSystemVolume() {
+    /// A call or Siri can pause our audio; the moment the interruption ends, ring again.
+    private func handleInterruption(_ note: Notification) {
+        guard alarmActive,
+              let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+        if type == .ended {
+            playAlarmSound()
+        }
+    }
+
+    /// Sets the system media volume to the chosen alarm level via MPVolumeView's slider
+    /// (works while the app is foregrounded).
+    private func pushSystemVolume() {
         guard let window = UIApplication.shared.connectedScenes
             .compactMap({ ($0 as? UIWindowScene)?.keyWindow }).first else { return }
         let volumeView = MPVolumeView(frame: CGRect(x: -200, y: -200, width: 10, height: 10))
         volumeView.alpha = 0.01
         window.addSubview(volumeView)
+        let target = alarmVolume
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             if let slider = volumeView.subviews.compactMap({ $0 as? UISlider }).first {
-                slider.value = 1.0
+                slider.value = target
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 volumeView.removeFromSuperview()
