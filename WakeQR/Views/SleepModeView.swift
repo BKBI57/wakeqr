@@ -19,9 +19,6 @@ struct SleepModeView: View {
             HStack(spacing: 6) {
                 Image(systemName: "alarm")
                 Text("المنبّه: \(model.alarmTimeText)")
-                if model.alarmKitActive {
-                    Image(systemName: "checkmark.seal.fill")
-                }
             }
             .font(.title3)
             .foregroundStyle(Color(white: 0.6))

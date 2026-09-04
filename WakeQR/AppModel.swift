@@ -37,8 +37,6 @@ final class AppModel: ObservableObject {
         ("alarm_bell", "جرس"),
         ("alarm_digital", "ديجيتال"),
     ]
-    /// true when the iOS 26 AlarmKit system alarm was successfully authorized+scheduled (Plan A).
-    @Published private(set) var alarmKitActive = false
     /// true while a tone preview is playing on the setup screen.
     @Published private(set) var previewing = false
 
@@ -57,6 +55,9 @@ final class AppModel: ObservableObject {
     /// Called once at launch.
     func bootstrap() {
         NotificationScheduler.requestAuthorization()
+        // Plan A (AlarmKit) was removed: it repeated daily forever and every new sleep-mode
+        // session leaked another one. Clear whatever ID we still have on record.
+        Task { await AlarmKitBridge.cancel() }
         // If we were killed while an alarm was due, resume ringing immediately.
         if let fire = UserDefaults.standard.object(forKey: "nextFireDate") as? Date,
            Date() >= fire, Date() < fire.addingTimeInterval(Self.ringingWindow) {
@@ -112,17 +113,6 @@ final class AppModel: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = true
         phase = .sleeping
         startTicker()
-
-        // Plan A, best effort: also register a real AlarmKit system alarm — but 3 minutes AFTER
-        // the in-app alarm. It is a backup for the killed-app case only; its mandatory X (stop)
-        // button must never be the thing that silences the real ringing. If the QR is scanned
-        // within those 3 minutes it gets cancelled and never fires.
-        let backup = fire.addingTimeInterval(3 * 60)
-        let bc = Calendar.current.dateComponents([.hour, .minute], from: backup)
-        Task { [weak self] in
-            guard let self else { return }
-            self.alarmKitActive = await AlarmKitBridge.scheduleDaily(hour: bc.hour ?? 0, minute: bc.minute ?? 0)
-        }
     }
 
     /// Leaving sleep mode is only allowed BEFORE the alarm fires.
@@ -177,6 +167,5 @@ final class AppModel: ObservableObject {
         nextFireDate = nil
         UserDefaults.standard.removeObject(forKey: "nextFireDate")
         Task { await AlarmKitBridge.cancel() }
-        alarmKitActive = false
     }
 }
