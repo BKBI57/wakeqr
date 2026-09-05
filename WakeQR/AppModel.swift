@@ -15,6 +15,10 @@ final class AppModel: ObservableObject {
     static let ringingWindow: TimeInterval = 45 * 60
     /// How long after a successful scan the follow-up check fires.
     static let followUpDelay: TimeInterval = 5 * 60
+    /// Cancelling is locked until this long after the scan. Standing at the QR seconds after
+    /// stopping the alarm is the worst moment to be trusted with a cancel button; being awake
+    /// two minutes later is real evidence you got up.
+    static let followUpUnlockDelay: TimeInterval = 2 * 60
 
     @Published private(set) var phase: Phase = .setup
     @Published var alarmHour: Int {
@@ -52,6 +56,8 @@ final class AppModel: ObservableObject {
     }
     /// When the follow-up check will fire; nil when nothing is pending.
     @Published private(set) var followUpDeadline: Date?
+    /// Cancelling only becomes possible at this moment.
+    @Published private(set) var followUpUnlockAt: Date?
     /// true while the current ring is the follow-up rather than the morning alarm.
     @Published private(set) var isFollowUpRing = false
 
@@ -117,6 +123,7 @@ final class AppModel: ObservableObject {
                 }
             } else {
                 followUpDeadline = due
+                followUpUnlockAt = UserDefaults.standard.object(forKey: "followUpUnlockAt") as? Date
                 phase = .goodMorning
                 startFollowUpTimer()
             }
@@ -230,11 +237,24 @@ final class AppModel: ObservableObject {
     /// Schedules the "are you still up?" ring. Cancelling it is a deliberate act (see the
     /// good-morning screen) because the app cannot tell being awake from having gone back to bed.
     private func armFollowUp() {
-        let due = Date().addingTimeInterval(Self.followUpDelay)
+        let now = Date()
+        let due = now.addingTimeInterval(Self.followUpDelay)
+        let unlock = now.addingTimeInterval(Self.followUpUnlockDelay)
         followUpDeadline = due
+        followUpUnlockAt = unlock
         UserDefaults.standard.set(due, forKey: "followUpDeadline")
+        UserDefaults.standard.set(unlock, forKey: "followUpUnlockAt")
+        // Safety net first: it clears pending requests, so the reminder has to be added after it.
         NotificationScheduler.scheduleSafetyNet(at: due, sound: alarmSound)
+        let minutesLeft = Int((Self.followUpDelay - Self.followUpUnlockDelay) / 60)
+        NotificationScheduler.scheduleFollowUpReminder(at: unlock, minutesLeft: minutesLeft)
         startFollowUpTimer()
+    }
+
+    /// false while the cancel button is still locked.
+    var canCancelFollowUp: Bool {
+        guard let unlock = followUpUnlockAt else { return false }
+        return Date() >= unlock
     }
 
     private func startFollowUpTimer() {
@@ -249,8 +269,9 @@ final class AppModel: ObservableObject {
         ticker = t
     }
 
-    /// Called when you confirm you are actually up.
+    /// Called when you confirm you are actually up. Refused while still locked.
     func cancelFollowUp() {
+        guard canCancelFollowUp else { return }
         clearFollowUp()
         NotificationScheduler.cancelAll()
     }
@@ -258,7 +279,9 @@ final class AppModel: ObservableObject {
     private func clearFollowUp() {
         ticker?.invalidate()
         followUpDeadline = nil
+        followUpUnlockAt = nil
         UserDefaults.standard.removeObject(forKey: "followUpDeadline")
+        UserDefaults.standard.removeObject(forKey: "followUpUnlockAt")
     }
 
     private func startFollowUpRing() {

@@ -42,31 +42,49 @@ struct GoodMorningView: View {
             Spacer()
 
             if let due = model.followUpDeadline {
-                VStack(spacing: 10) {
-                    TimelineView(.periodic(from: .now, by: 1)) { context in
-                        let left = max(0, Int(due.timeIntervalSince(context.date)))
-                        Text("فحص الاستيقاظ بعد \(left / 60):\(String(format: "%02d", left % 60))")
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let now = context.date
+                    let toRing = max(0, Int(due.timeIntervalSince(now)))
+                    let unlocked = (model.followUpUnlockAt.map { now >= $0 }) ?? false
+                    let toUnlock = max(0, Int((model.followUpUnlockAt ?? now).timeIntervalSince(now)))
+
+                    VStack(spacing: 10) {
+                        Text("يرن مجددًا بعد \(toRing / 60):\(String(format: "%02d", toRing % 60))")
                             .font(.title3.bold().monospacedDigit())
                             .foregroundStyle(.white)
-                    }
 
-                    Text("إذا رجعت نمت رح يرن. اضغط مطوّلًا ثانيتين لتأكيد إنك صاحي.")
-                        .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.85))
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 30)
+                        if unlocked {
+                            Text("اضغط مطوّلًا ثانيتين لتأكيد أنك صاحٍ")
+                                .font(.footnote)
+                                .foregroundStyle(.white.opacity(0.85))
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 30)
 
-                    // Deliberately a long press: a plain tap is too easy to hit half-asleep,
-                    // which is exactly the state this check exists to catch.
-                    Text("أنا صاحي — ألغِ الفحص")
-                        .font(.headline.bold())
-                        .foregroundStyle(Color(red: 0.9, green: 0.35, blue: 0.15))
-                        .padding(.horizontal, 26)
-                        .padding(.vertical, 13)
-                        .background(Capsule().fill(.white))
-                        .onLongPressGesture(minimumDuration: 2) {
-                            model.cancelFollowUp()
+                            // Long press, not a tap: a tap is too easy to hit half-asleep.
+                            Text("أنا صاحي — ألغِ الفحص")
+                                .font(.headline.bold())
+                                .foregroundStyle(Color(red: 0.9, green: 0.35, blue: 0.15))
+                                .padding(.horizontal, 26)
+                                .padding(.vertical, 13)
+                                .background(Capsule().fill(.white))
+                                .onLongPressGesture(minimumDuration: 2) {
+                                    model.cancelFollowUp()
+                                }
+                        } else {
+                            // Locked on purpose for the first couple of minutes: still being awake
+                            // when it unlocks is the actual evidence that you got up.
+                            Text("يفتح الإلغاء بعد \(toUnlock / 60):\(String(format: "%02d", toUnlock % 60))")
+                                .font(.footnote)
+                                .foregroundStyle(.white.opacity(0.85))
+
+                            Label("أنا صاحي — ألغِ الفحص", systemImage: "lock.fill")
+                                .font(.headline.bold())
+                                .foregroundStyle(.white.opacity(0.55))
+                                .padding(.horizontal, 22)
+                                .padding(.vertical, 13)
+                                .background(Capsule().fill(.white.opacity(0.16)))
                         }
+                    }
                 }
                 .padding(.bottom, 34)
             } else {

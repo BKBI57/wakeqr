@@ -41,6 +41,21 @@ enum NotificationScheduler {
         }
     }
 
+    /// One reminder that the follow-up cancel window has opened. Added on top of an already
+    /// scheduled safety net, so it must not clear pending requests.
+    static func scheduleFollowUpReminder(at date: Date, minutesLeft: Int) {
+        let content = UNMutableNotificationContent()
+        content.title = "ما زلت صاحيًا؟"
+        content.body = "باقي \(minutesLeft) دقائق قبل أن يرن المنبّه مجددًا. افتح WakeQR لتأكيد أنك صاحٍ."
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive
+
+        let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "wakeqr-followup-unlock", content: content, trigger: trigger))
+    }
+
     static func cancelAll() {
         let center = UNUserNotificationCenter.current()
         center.removeAllPendingNotificationRequests()
