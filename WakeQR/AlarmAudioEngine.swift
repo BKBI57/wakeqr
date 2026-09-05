@@ -18,6 +18,20 @@ final class AlarmAudioEngine {
     private var alarmSound = "alarm_classic"
     private var alarmActive = false
 
+    /// Fade-in: the alarm opens at `rampFloor` of the chosen level and reaches full over
+    /// `rampDuration`. Gentler to wake to, and still unmissable within half a minute.
+    private static let rampDuration: TimeInterval = 30
+    private static let rampFloor: Float = 0.2
+    private var rampStart: Date?
+    private var tick = 0
+
+    /// The level to apply right now, somewhere between `rampFloor` and the chosen volume.
+    private var rampedVolume: Float {
+        guard let rampStart else { return alarmVolume }
+        let p = Float(min(1.0, Date().timeIntervalSince(rampStart) / Self.rampDuration))
+        return alarmVolume * (Self.rampFloor + (1 - Self.rampFloor) * p)
+    }
+
     init() {
         NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
@@ -50,17 +64,23 @@ final class AlarmAudioEngine {
         alarmSound = sound
         alarmVolume = min(max(volume, 0.3), 1.0)
         alarmActive = true
+        rampStart = Date()
+        tick = 0
         playAlarmSound()
 
-        // Re-push the media volume to the chosen level every few seconds (Alarmy-style),
-        // so the volume buttons can't silence the alarm.
+        // Re-push the media volume every few seconds (Alarmy-style) so the volume buttons can't
+        // silence the alarm. Ticking every second keeps the fade-in smooth; the system-volume
+        // push stays on its ~3s cadence because each one spins up a throwaway MPVolumeView.
         pushSystemVolume()
         volumeTimer?.invalidate()
-        let t = Timer(timeInterval: 3.0, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
-                self?.pushSystemVolume()
+                guard let self else { return }
+                self.player?.volume = self.rampedVolume
+                self.tick += 1
+                if self.tick % 3 == 0 { self.pushSystemVolume() }
                 // Belt and suspenders: if anything stopped playback, restart it.
-                if let self, self.alarmActive, self.player?.isPlaying != true {
+                if self.alarmActive, self.player?.isPlaying != true {
                     self.playAlarmSound()
                 }
             }
@@ -79,7 +99,7 @@ final class AlarmAudioEngine {
         player?.stop()
         player = try? AVAudioPlayer(contentsOf: u)
         player?.numberOfLoops = -1
-        player?.volume = alarmVolume
+        player?.volume = rampedVolume
         player?.play()
     }
 
@@ -106,6 +126,7 @@ final class AlarmAudioEngine {
 
     func stopAll() {
         alarmActive = false
+        rampStart = nil
         volumeTimer?.invalidate()
         volumeTimer = nil
         player?.stop()
@@ -133,7 +154,7 @@ final class AlarmAudioEngine {
         let volumeView = MPVolumeView(frame: CGRect(x: -200, y: -200, width: 10, height: 10))
         volumeView.alpha = 0.01
         window.addSubview(volumeView)
-        let target = alarmVolume
+        let target = rampedVolume
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             if let slider = volumeView.subviews.compactMap({ $0 as? UISlider }).first {
                 slider.value = target

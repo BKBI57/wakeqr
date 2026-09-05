@@ -13,6 +13,19 @@ struct SetAlarmView: View {
                 Text("منبّه لا يسكت إلا بمسح رمز QR")
                     .font(.headline)
                     .foregroundStyle(.secondary)
+
+                if model.streak > 0 {
+                    HStack(spacing: 5) {
+                        Text("🔥")
+                        Text("\(model.streak) \(model.streak == 1 ? "يوم" : "أيام") متتالية")
+                            .font(.subheadline.bold())
+                    }
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.orange.opacity(0.15)))
+                    .padding(.top, 2)
+                }
             }
 
             DatePicker("وقت الاستيقاظ", selection: model.alarmTimeBinding, displayedComponents: .hourAndMinute)
@@ -39,7 +52,8 @@ struct SetAlarmView: View {
                         Text(sound.label).tag(sound.id)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
+                .tint(.orange)
             }
             .padding(.horizontal, 28)
 
@@ -60,7 +74,7 @@ struct SetAlarmView: View {
                     Image(systemName: "speaker.wave.3.fill")
                         .foregroundStyle(.secondary)
                 }
-                Text("أثناء الرنين يثبّت التطبيق الصوت على هذا المستوى — أزرار الصوت لن تخفضه")
+                Text("يبدأ الرنين هادئًا ويصل لهذا المستوى خلال ٣٠ ثانية — وأزرار الصوت لن تخفضه")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

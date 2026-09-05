@@ -36,9 +36,45 @@ final class AppModel: ObservableObject {
         ("alarm_siren", "سارينة"),
         ("alarm_bell", "جرس"),
         ("alarm_digital", "ديجيتال"),
+        ("alarm_urgent", "إنذار"),
+        ("alarm_buzzer", "أزيز"),
+        ("alarm_chime", "تدرّج"),
     ]
     /// true while a tone preview is playing on the setup screen.
     @Published private(set) var previewing = false
+    /// Consecutive days the alarm was stopped by scanning the QR code.
+    @Published private(set) var streak: Int
+
+    /// Shown on the good-morning screen. The point is the minutes right after the scan —
+    /// standing in the bathroom having already scanned is exactly when going back to bed happens.
+    static let morningMessages: [String] = [
+        "قمت من السرير فعلًا. أصعب جزء خلص — لا ترجع له.",
+        "«خمس دقائق بس» هي الجملة اللي بتضيّع الصبح كله.",
+        "صلّ الفجر أولًا. بعدها قرّر إذا بدك ترجع تنام.",
+        "الرجوع للفراش الآن بيلغي كل اللي عملته قبل شوي.",
+        "اشرب كوب ماء الآن — الجسم بيصحى بالماء، مش بالنيّة.",
+        "أول عشر دقائق هي المعركة كلها. اصمد فيها وبعدها بتسهل.",
+        "لا تجلس على طرف السرير. اطلع من الغرفة.",
+        "افتح الشبّاك وخلّي الضوء يدخل — الضوء بيوقف هرمون النوم.",
+        "النوم بعد الفجر بيسرق طاقة اليوم كله، مش بس ساعة.",
+        "الشخص اللي بدك تصير إياه — واقف هلق، مش نايم.",
+        "ما في نسخة أفضل منك بتبدأ يومها الساعة عشرة.",
+        "حرّك جسمك دقيقة وحدة. الحركة بتقتل النعاس أسرع من أي شي.",
+        "لو رجعت نمت هلق، بكرا بتلوم حالك — وأنت بتعرف.",
+        "الصبح هدوء ما بتلاقيه بباقي اليوم. لا تضيّعه.",
+        "أنت صحيت. خلّيها تعني شي.",
+        "اغسل وجهك بماء بارد قبل ما تفكر بأي شي تاني.",
+        "قرار واحد بيفرق: تطلع من الغرفة، أو ترجع للسرير.",
+        "التعب اللي حاسّه هلق بيروح خلال ربع ساعة. النوم بيرجّعه أثقل.",
+        "لا تفتح التلفون وأنت واقف. اعمل شي بجسمك أول.",
+        "يومك بدأ. مبروك — كمّل.",
+    ]
+
+    /// Rotates once per calendar day so the message is different each morning.
+    var morningMessage: String {
+        let day = Calendar.current.ordinality(of: .day, in: .era, for: Date()) ?? 0
+        return Self.morningMessages[day % Self.morningMessages.count]
+    }
 
     private let audio = AlarmAudioEngine()
     private var ticker: Timer?
@@ -50,6 +86,7 @@ final class AppModel: ObservableObject {
         alarmMinute = d.object(forKey: "alarmMinute") as? Int ?? 0
         alarmVolume = d.object(forKey: "alarmVolume") as? Double ?? 1.0
         alarmSound = d.string(forKey: "alarmSound") ?? "alarm_classic"
+        streak = d.object(forKey: "streak") as? Int ?? 0
     }
 
     /// Called once at launch.
@@ -150,9 +187,28 @@ final class AppModel: ObservableObject {
     /// Returns true only for the correct payload; the alarm keeps ringing otherwise.
     func handleScannedCode(_ code: String) -> Bool {
         guard code == Self.qrPayload else { return false }
+        recordWake()
         stopEverything()
         phase = .goodMorning
         return true
+    }
+
+    /// Extends the streak on the first successful scan of a calendar day; a skipped day resets it.
+    private func recordWake() {
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: Date())
+        let d = UserDefaults.standard
+
+        if let last = d.object(forKey: "lastWakeDay") as? Date {
+            let lastDay = cal.startOfDay(for: last)
+            guard lastDay != today else { return }   // already counted this morning
+            let gap = cal.dateComponents([.day], from: lastDay, to: today).day ?? .max
+            streak = (gap == 1) ? streak + 1 : 1
+        } else {
+            streak = 1
+        }
+        d.set(streak, forKey: "streak")
+        d.set(today, forKey: "lastWakeDay")
     }
 
     func backToSetup() {
