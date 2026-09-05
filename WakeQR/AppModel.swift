@@ -13,6 +13,8 @@ final class AppModel: ObservableObject {
     static let qrPayload = "WAKE_UP_BKBI"
     /// If the app is relaunched within this window after fire time, it goes straight to ringing.
     static let ringingWindow: TimeInterval = 45 * 60
+    /// How long after a successful scan the follow-up check fires.
+    static let followUpDelay: TimeInterval = 5 * 60
 
     @Published private(set) var phase: Phase = .setup
     @Published var alarmHour: Int {
@@ -44,6 +46,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var previewing = false
     /// Consecutive days the alarm was stopped by scanning the QR code.
     @Published private(set) var streak: Int
+    /// Re-checks that you actually stayed up, a few minutes after the first scan.
+    @Published var followUpEnabled: Bool {
+        didSet { UserDefaults.standard.set(followUpEnabled, forKey: "followUpEnabled") }
+    }
+    /// When the follow-up check will fire; nil when nothing is pending.
+    @Published private(set) var followUpDeadline: Date?
+    /// true while the current ring is the follow-up rather than the morning alarm.
+    @Published private(set) var isFollowUpRing = false
 
     /// Shown on the good-morning screen. The point is the minutes right after the scan —
     /// standing in the bathroom having already scanned is exactly when going back to bed happens.
@@ -87,6 +97,7 @@ final class AppModel: ObservableObject {
         alarmVolume = d.object(forKey: "alarmVolume") as? Double ?? 1.0
         alarmSound = d.string(forKey: "alarmSound") ?? "alarm_classic"
         streak = d.object(forKey: "streak") as? Int ?? 0
+        followUpEnabled = d.object(forKey: "followUpEnabled") as? Bool ?? true
     }
 
     /// Called once at launch.
@@ -95,6 +106,22 @@ final class AppModel: ObservableObject {
         // Plan A (AlarmKit) was removed: it repeated daily forever and every new sleep-mode
         // session leaked another one. Clear whatever ID we still have on record.
         Task { await AlarmKitBridge.cancel() }
+
+        // A pending follow-up check outlives a force-quit: resume or fire it.
+        if let due = UserDefaults.standard.object(forKey: "followUpDeadline") as? Date {
+            if Date() >= due {
+                if Date() < due.addingTimeInterval(Self.ringingWindow) {
+                    startFollowUpRing()
+                } else {
+                    clearFollowUp()   // too late to be useful; drop it
+                }
+            } else {
+                followUpDeadline = due
+                phase = .goodMorning
+                startFollowUpTimer()
+            }
+            return
+        }
         // If we were killed while an alarm was due, resume ringing immediately.
         if let fire = UserDefaults.standard.object(forKey: "nextFireDate") as? Date,
            Date() >= fire, Date() < fire.addingTimeInterval(Self.ringingWindow) {
@@ -175,6 +202,7 @@ final class AppModel: ObservableObject {
 
     private func startRinging() {
         ticker?.invalidate()
+        isFollowUpRing = false
         UIApplication.shared.isIdleTimerDisabled = true
         audio.startAlarm(soundNamed: alarmSound, volume: Float(alarmVolume))
         phase = .ringing
@@ -187,10 +215,59 @@ final class AppModel: ObservableObject {
     /// Returns true only for the correct payload; the alarm keeps ringing otherwise.
     func handleScannedCode(_ code: String) -> Bool {
         guard code == Self.qrPayload else { return false }
+        let wasFollowUp = isFollowUpRing
         recordWake()
         stopEverything()
         phase = .goodMorning
+        // Arm the check only after the morning alarm. Scanning the follow-up itself ends the day —
+        // otherwise it would loop every five minutes forever.
+        if followUpEnabled && !wasFollowUp { armFollowUp() }
         return true
+    }
+
+    // MARK: - Follow-up check
+
+    /// Schedules the "are you still up?" ring. Cancelling it is a deliberate act (see the
+    /// good-morning screen) because the app cannot tell being awake from having gone back to bed.
+    private func armFollowUp() {
+        let due = Date().addingTimeInterval(Self.followUpDelay)
+        followUpDeadline = due
+        UserDefaults.standard.set(due, forKey: "followUpDeadline")
+        NotificationScheduler.scheduleSafetyNet(at: due, sound: alarmSound)
+        startFollowUpTimer()
+    }
+
+    private func startFollowUpTimer() {
+        ticker?.invalidate()
+        let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let due = self.followUpDeadline, self.phase == .goodMorning else { return }
+                if Date() >= due { self.startFollowUpRing() }
+            }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        ticker = t
+    }
+
+    /// Called when you confirm you are actually up.
+    func cancelFollowUp() {
+        clearFollowUp()
+        NotificationScheduler.cancelAll()
+    }
+
+    private func clearFollowUp() {
+        ticker?.invalidate()
+        followUpDeadline = nil
+        UserDefaults.standard.removeObject(forKey: "followUpDeadline")
+    }
+
+    private func startFollowUpRing() {
+        clearFollowUp()
+        isFollowUpRing = true
+        UIApplication.shared.isIdleTimerDisabled = true
+        audio.startAlarm(soundNamed: alarmSound, volume: Float(alarmVolume))
+        phase = .ringing
+        NotificationScheduler.scheduleSafetyNet(at: Date().addingTimeInterval(90), sound: alarmSound)
     }
 
     /// Extends the streak on the first successful scan of a calendar day; a skipped day resets it.
@@ -212,11 +289,13 @@ final class AppModel: ObservableObject {
     }
 
     func backToSetup() {
+        cancelFollowUp()
         phase = .setup
     }
 
     private func stopEverything() {
         ticker?.invalidate()
+        isFollowUpRing = false
         audio.stopAll()
         NotificationScheduler.cancelAll()
         UIApplication.shared.isIdleTimerDisabled = false

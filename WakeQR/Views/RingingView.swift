@@ -10,13 +10,15 @@ struct RingingView: View {
 
     var body: some View {
         VStack(spacing: 18) {
-            Text("استيقظ! 🔔")
+            Text(model.isFollowUpRing ? "رجعت نمت! 🔔" : "استيقظ! 🔔")
                 .font(.system(size: 44, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
                 .scaleEffect(pulse ? 1.08 : 1.0)
                 .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: pulse)
 
-            Text("الطريقة الوحيدة للإيقاف:\nامسح رمز QR المطبوع")
+            Text(model.isFollowUpRing
+                 ? "ما أكّدت إنك صاحي خلال ٥ دقائق.\nامسح الرمز مرة أخرى"
+                 : "الطريقة الوحيدة للإيقاف:\nامسح رمز QR المطبوع")
                 .font(.title3.bold())
                 .foregroundStyle(.white.opacity(0.9))
                 .multilineTextAlignment(.center)

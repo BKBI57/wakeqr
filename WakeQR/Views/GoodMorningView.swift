@@ -41,13 +41,43 @@ struct GoodMorningView: View {
 
             Spacer()
 
-            Button("تم ✅") {
-                model.backToSetup()
+            if let due = model.followUpDeadline {
+                VStack(spacing: 10) {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let left = max(0, Int(due.timeIntervalSince(context.date)))
+                        Text("فحص الاستيقاظ بعد \(left / 60):\(String(format: "%02d", left % 60))")
+                            .font(.title3.bold().monospacedDigit())
+                            .foregroundStyle(.white)
+                    }
+
+                    Text("إذا رجعت نمت رح يرن. اضغط مطوّلًا ثانيتين لتأكيد إنك صاحي.")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+
+                    // Deliberately a long press: a plain tap is too easy to hit half-asleep,
+                    // which is exactly the state this check exists to catch.
+                    Text("أنا صاحي — ألغِ الفحص")
+                        .font(.headline.bold())
+                        .foregroundStyle(Color(red: 0.9, green: 0.35, blue: 0.15))
+                        .padding(.horizontal, 26)
+                        .padding(.vertical, 13)
+                        .background(Capsule().fill(.white))
+                        .onLongPressGesture(minimumDuration: 2) {
+                            model.cancelFollowUp()
+                        }
+                }
+                .padding(.bottom, 34)
+            } else {
+                Button("تم ✅") {
+                    model.backToSetup()
+                }
+                .font(.title3.bold())
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .padding(.bottom, 40)
             }
-            .font(.title3.bold())
-            .buttonStyle(.borderedProminent)
-            .tint(.orange)
-            .padding(.bottom, 40)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(

@@ -81,6 +81,20 @@ struct SetAlarmView: View {
             }
             .padding(.horizontal, 28)
 
+            VStack(spacing: 6) {
+                Toggle(isOn: $model.followUpEnabled) {
+                    Text("فحص الاستيقاظ بعد ٥ دقائق")
+                        .font(.subheadline.bold())
+                }
+                .tint(.orange)
+
+                Text("بعد المسح، يرن مرة أخرى بعد ٥ دقائق إلا إذا أكّدت أنك صاحي")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 28)
+
             Button {
                 model.enterSleepMode()
             } label: {
