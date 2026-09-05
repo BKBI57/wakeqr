@@ -6,3 +6,4 @@ Payload/
 .DS_Store
 __pycache__/
 dist/
+WakeQR/Resources/*.wav

@@ -23,6 +23,9 @@ jobs:
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
 
+      - name: Generate alarm tones
+        run: python3 tools/generate_sounds.py
+
       - name: Install XcodeGen
         run: brew install xcodegen
 
