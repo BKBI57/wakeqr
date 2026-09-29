@@ -41,6 +41,10 @@ struct GoodMorningView: View {
 
             Spacer()
 
+            // Right after your own scan is the natural moment to wake the other one.
+            BuddyPanel()
+                .padding(.horizontal, 28)
+
             if let due = model.followUpDeadline {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let now = context.date

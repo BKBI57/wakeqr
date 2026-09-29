@@ -61,6 +61,34 @@ final class AppModel: ObservableObject {
     /// true while the current ring is the follow-up rather than the morning alarm.
     @Published private(set) var isFollowUpRing = false
 
+    // MARK: Buddy wake state
+
+    /// The two people sharing the app: (id used on the wire, name on the buttons).
+    static let buddies: [(id: String, name: String)] = [
+        ("mahmoud", "محمود"),
+        ("barakat", "بركات"),
+    ]
+    static func buddyName(_ id: String) -> String {
+        buddies.first { $0.id == id }?.name ?? id
+    }
+    /// Who owns this phone. Picked once on the setup screen; decides which topic we listen to.
+    @Published var buddyMe: String? {
+        didSet {
+            UserDefaults.standard.set(buddyMe, forKey: "buddyMe")
+            buddyStatus = nil
+        }
+    }
+    /// Feedback line under the buddy buttons ("sent", "he is up", "failed").
+    @Published private(set) var buddyStatus: String?
+    /// Set while the current ring was started by the other person; they get told when it's scanned.
+    @Published private(set) var buddyRingFrom: String?
+    /// How often we ask the relay for new messages.
+    static let buddyPollInterval: TimeInterval = 10
+    /// A wake request older than this is stale (e.g. sent while this phone was off) — ignore it.
+    static let buddyMaxAge: TimeInterval = 3 * 60
+    private var buddyTimer: Timer?
+    private var buddyPolling = false
+
     /// Shown on the good-morning screen. The point is the minutes right after the scan —
     /// standing in the bathroom having already scanned is exactly when going back to bed happens.
     static let morningMessages: [String] = [
@@ -104,6 +132,7 @@ final class AppModel: ObservableObject {
         alarmSound = d.string(forKey: "alarmSound") ?? "alarm_classic"
         streak = d.object(forKey: "streak") as? Int ?? 0
         followUpEnabled = d.object(forKey: "followUpEnabled") as? Bool ?? true
+        buddyMe = d.string(forKey: "buddyMe")
     }
 
     /// Called once at launch.
@@ -112,6 +141,19 @@ final class AppModel: ObservableObject {
         // Plan A (AlarmKit) was removed: it repeated daily forever and every new sleep-mode
         // session leaked another one. Clear whatever ID we still have on record.
         Task { await AlarmKitBridge.cancel() }
+        startBuddyListening()
+
+        // A wake request from the other person outlives a force-quit too.
+        if let from = UserDefaults.standard.string(forKey: "buddyRingFrom"),
+           let at = UserDefaults.standard.object(forKey: "buddyRingAt") as? Date {
+            if Date() < at.addingTimeInterval(Self.ringingWindow) {
+                clearFollowUp()
+                buddyRingFrom = from
+                startRinging()
+                return
+            }
+            clearBuddyRing()
+        }
 
         // A pending follow-up check outlives a force-quit: resume or fire it.
         if let due = UserDefaults.standard.object(forKey: "followUpDeadline") as? Date {
@@ -223,6 +265,10 @@ final class AppModel: ObservableObject {
     func handleScannedCode(_ code: String) -> Bool {
         guard code == Self.qrPayload else { return false }
         let wasFollowUp = isFollowUpRing
+        // Tell whoever woke us that it worked.
+        if let from = buddyRingFrom, let me = buddyMe {
+            Task { _ = await BuddyLink.send("awake:\(me)", to: from) }
+        }
         recordWake()
         stopEverything()
         phase = .goodMorning
@@ -324,6 +370,76 @@ final class AppModel: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = false
         nextFireDate = nil
         UserDefaults.standard.removeObject(forKey: "nextFireDate")
+        clearBuddyRing()
         Task { await AlarmKitBridge.cancel() }
+    }
+
+    // MARK: - Buddy wake
+
+    /// Polls this phone's topic for as long as the app runs. In Sleep Mode the keep-alive audio
+    /// keeps the app running all night, so a wake request lands within ~10 seconds.
+    private func startBuddyListening() {
+        buddyTimer?.invalidate()
+        let t = Timer(timeInterval: Self.buddyPollInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.pollBuddy() }
+        }
+        RunLoop.main.add(t, forMode: .common)
+        buddyTimer = t
+        Task { await pollBuddy() }
+    }
+
+    private func pollBuddy() async {
+        guard let me = buddyMe, !buddyPolling else { return }
+        buddyPolling = true
+        defer { buddyPolling = false }
+        let messages = await BuddyLink.recent(for: me)
+
+        let d = UserDefaults.standard
+        var handled = d.stringArray(forKey: "buddyHandledIDs") ?? []
+        for m in messages where !handled.contains(m.id) {
+            handled.append(m.id)
+            guard Date().timeIntervalSince(m.time) < Self.buddyMaxAge else { continue }
+            let parts = m.text.split(separator: ":", maxSplits: 1).map(String.init)
+            guard parts.count == 2 else { continue }
+            switch parts[0] {
+            case "ring": receiveBuddyRing(from: parts[1])
+            case "awake":
+                let time = m.time.formatted(date: .omitted, time: .shortened)
+                buddyStatus = "\(Self.buddyName(parts[1])) صحي ✅ (\(time))"
+            default: break
+            }
+        }
+        d.set(Array(handled.suffix(100)), forKey: "buddyHandledIDs")
+    }
+
+    /// The other person pressed our button: ring exactly like the morning alarm (QR-only stop).
+    private func receiveBuddyRing(from sender: String) {
+        buddyRingFrom = sender
+        UserDefaults.standard.set(sender, forKey: "buddyRingFrom")
+        UserDefaults.standard.set(Date(), forKey: "buddyRingAt")
+        guard phase != .ringing else { return }   // already ringing; the scan will still reply
+        audio.stopPreview()
+        previewing = false
+        clearFollowUp()
+        startRinging()
+    }
+
+    private func clearBuddyRing() {
+        buddyRingFrom = nil
+        UserDefaults.standard.removeObject(forKey: "buddyRingFrom")
+        UserDefaults.standard.removeObject(forKey: "buddyRingAt")
+    }
+
+    /// Wake the given person (pressing your own name rings your own phone — handy for testing).
+    func sendBuddyRing(to person: String) {
+        guard let me = buddyMe else { return }
+        let name = Self.buddyName(person)
+        buddyStatus = "عم برسل لـ\(name)…"
+        Task {
+            let ok = await BuddyLink.send("ring:\(me)", to: person)
+            buddyStatus = ok
+                ? "وصل لـ\(name) — ناطر يمسح الرمز ⏳"
+                : "ما وصل ❌ — تأكد من الإنترنت وجرّب مرة تانية"
+        }
     }
 }

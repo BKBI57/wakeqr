@@ -8,17 +8,29 @@ struct RingingView: View {
     @State private var pulse = false
     @State private var wrongCode = false
 
+    private var title: String {
+        if let from = model.buddyRingFrom { return "\(AppModel.buddyName(from)) عم يصحّيك! 🔔" }
+        return model.isFollowUpRing ? "رجعت نمت! 🔔" : "استيقظ! 🔔"
+    }
+
+    private var subtitle: String {
+        if let from = model.buddyRingFrom {
+            return "امسح رمز QR لإيقافه\nوبيوصل لـ\(AppModel.buddyName(from)) إنك صحيت"
+        }
+        return model.isFollowUpRing
+            ? "ما أكّدت إنك صاحي خلال ٥ دقائق.\nامسح الرمز مرة أخرى"
+            : "الطريقة الوحيدة للإيقاف:\nامسح رمز QR المطبوع"
+    }
+
     var body: some View {
         VStack(spacing: 18) {
-            Text(model.isFollowUpRing ? "رجعت نمت! 🔔" : "استيقظ! 🔔")
+            Text(title)
                 .font(.system(size: 44, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
                 .scaleEffect(pulse ? 1.08 : 1.0)
                 .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: pulse)
 
-            Text(model.isFollowUpRing
-                 ? "ما أكّدت إنك صاحي خلال ٥ دقائق.\nامسح الرمز مرة أخرى"
-                 : "الطريقة الوحيدة للإيقاف:\nامسح رمز QR المطبوع")
+            Text(subtitle)
                 .font(.title3.bold())
                 .foregroundStyle(.white.opacity(0.9))
                 .multilineTextAlignment(.center)
