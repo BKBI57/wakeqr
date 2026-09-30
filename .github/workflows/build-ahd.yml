@@ -1,0 +1,62 @@
+name: Build Ahd IPA
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["Ahd/**", ".github/workflows/build-ahd.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: Ahd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then
+            echo "::error::No Xcode 26 found on this runner"
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (unsigned, device)
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Ahd.xcodeproj \
+            -scheme Ahd \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            build
+
+      - name: Package unsigned IPA
+        run: |
+          APP="build/Build/Products/Release-iphoneos/Ahd.app"
+          test -d "$APP"
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry Ahd.ipa Payload
+          ls -la Ahd.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ahd.ipa
+          path: Ahd/Ahd.ipa
+          if-no-files-found: error
