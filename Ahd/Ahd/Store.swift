@@ -3,6 +3,7 @@ import SwiftUI
 
 /// One pledge. `current` is what slipping would cost right now: it starts at `start`, grows by
 /// `step` for every day answered "I didn't", and goes back to `start` after a slip.
+/// A `step` of 0 makes it a fixed amount.
 struct Habit: Codable, Identifiable, Equatable {
     var id: Int
     var title: String
@@ -13,6 +14,8 @@ struct Habit: Codable, Identifiable, Equatable {
     var owed: Int = 0
     /// Days in a row answered "I didn't".
     var cleanDays: Int = 0
+    /// Weekday (1 = Sunday ... 7 = Saturday) when this one is allowed and not asked about.
+    var allowedWeekday: Int?
 }
 
 struct AhdState: Codable {
@@ -106,6 +109,16 @@ final class Store: ObservableObject {
         return checkTime(on: next)
     }
 
+    /// Habits to ask about on `day` — a habit's allowed weekday is skipped.
+    func habits(askedOn day: Date) -> [Habit] {
+        let weekday = cal.component(.weekday, from: day)
+        return state.habits.filter { $0.allowedWeekday != weekday }
+    }
+
+    nonisolated static func weekdayName(_ weekday: Int) -> String {
+        ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"][(weekday - 1 + 7) % 7]
+    }
+
     func dayLabel(_ day: Date) -> String {
         if cal.isDateInToday(day) { return "اليوم" }
         if cal.isDateInYesterday(day) { return "مبارح" }
@@ -127,8 +140,10 @@ final class Store: ObservableObject {
     /// `didIt[habit.id]` is true when the habit happened that day.
     func submit(day: Date, didIt: [Int: Bool]) {
         var s = state
+        let asked = Set(habits(askedOn: day).map(\.id))
         for i in s.habits.indices {
             let id = s.habits[i].id
+            guard asked.contains(id) else { continue }   // allowed day: nothing changes
             if didIt[id] == true {
                 s.habits[i].owed += s.habits[i].current
                 s.habits[i].current = s.habits[i].start
@@ -156,6 +171,8 @@ final class Store: ObservableObject {
             s.habits[i].title = e.title
             s.habits[i].start = e.start
             s.habits[i].step = e.step
+            s.habits[i].allowedWeekday = e.allowedWeekday
+            if e.step == 0 { s.habits[i].current = e.start }   // fixed amount follows its setting
         }
         s.checkHour = checkHour
         s.me = me

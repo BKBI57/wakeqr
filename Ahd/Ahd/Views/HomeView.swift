@@ -18,9 +18,15 @@ struct HomeView: View {
                                 Text("دينار")
                                     .font(.title3.bold())
                             }
-                            Text("لو عملتها، هاد يلي رح تدفعه لـ\(store.partnerName). بكرا بيصير \(habit.current + habit.step).")
+                            Text(habit.step > 0
+                                 ? "لو عملتها، هاد يلي رح تدفعه لـ\(store.partnerName). بكرا بيصير \(habit.current + habit.step)."
+                                 : "مبلغ ثابت، بتدفعه لـ\(store.partnerName) إذا عملتها.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                            if let d = habit.allowedWeekday {
+                                Text("مسموح يوم \(Store.weekdayName(d)) بس 🍽️")
+                                    .font(.footnote.bold())
+                            }
                             if habit.cleanDays > 0 {
                                 Text("🔥 \(habit.cleanDays) \(habit.cleanDays == 1 ? "يوم" : "أيام") ملتزم")
                                     .font(.subheadline.bold())

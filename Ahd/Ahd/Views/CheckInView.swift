@@ -8,7 +8,7 @@ struct CheckInView: View {
     @State private var typed: [Int: String] = [:]
 
     private var ready: Bool {
-        store.habits.allSatisfy { h in
+        store.habits(askedOn: day).allSatisfy { h in
             switch answers[h.id] {
             case true?: return true
             case false?: return Store.matches(typed[h.id] ?? "", Store.cleanSentence)
@@ -24,7 +24,14 @@ struct CheckInView: View {
                     .font(.title.bold())
                     .padding(.top, 24)
 
-                ForEach(store.habits) { habit in
+                ForEach(store.habits.filter { h in !store.habits(askedOn: day).contains { $0.id == h.id } }) { habit in
+                    Card {
+                        Text("\(habit.title): \(store.dayLabel(day)) يوم مسموح 🍽️")
+                            .font(.headline)
+                    }
+                }
+
+                ForEach(store.habits(askedOn: day)) { habit in
                     Card {
                         Text("\(habit.title): هل عملتها \(store.dayLabel(day))؟")
                             .font(.headline)
@@ -42,9 +49,11 @@ struct CheckInView: View {
                             SentenceField(sentence: Store.cleanSentence, text: Binding(
                                 get: { typed[habit.id] ?? "" },
                                 set: { typed[habit.id] = $0 }))
-                            Text("المبلغ بيصير \(habit.current + habit.step) دينار 📈")
-                                .font(.footnote.bold())
-                                .foregroundStyle(.green)
+                            if habit.step > 0 {
+                                Text("المبلغ بيصير \(habit.current + habit.step) دينار 📈")
+                                    .font(.footnote.bold())
+                                    .foregroundStyle(.green)
+                            }
                         } else if answers[habit.id] == true {
                             Text("رح يصير عليك \(habit.current) دينار لـ\(store.partnerName)")
                                 .font(.footnote.bold())
