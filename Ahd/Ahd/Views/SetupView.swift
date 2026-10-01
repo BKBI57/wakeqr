@@ -13,7 +13,7 @@ struct SetupView: View {
         NavigationStack {
             Form {
                 Section {
-                    Text("كل يوم الساعة \(hourText(checkHour)) بيسألك سؤالين. كل يوم بتجاوب «ما عملتها» المبلغ بيزيد، وإذا عملتها بتدفعه لصاحبك.")
+                    Text("كل يوم الساعة \(hourText(checkHour)) التلفون بيرن لحتى تفتح عهد وتجاوب. إذا عملتها بتدفع المبلغ لصاحبك، والمرة الجاية بيصير أغلى.")
                         .font(.subheadline)
                 }
 
@@ -71,7 +71,7 @@ struct HabitEditor: View {
                 }
             } else {
                 Stepper("بيبدأ بـ \(habit.start) دينار", value: $habit.start, in: 1...500)
-                Stepper("بيزيد \(habit.step) دينار كل يوم", value: $habit.step, in: 1...100)
+                Stepper("بيزيد \(habit.step) دينار كل مرة بتعملها", value: $habit.step, in: 1...100)
             }
         }
     }

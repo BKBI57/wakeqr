@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Routing: setup first; an unpaid debt blocks everything; then unanswered days; then home.
 struct ContentView: View {
@@ -19,9 +20,29 @@ struct ContentView: View {
             }
         }
         .environment(\.layoutDirection, .rightToLeft)
-        .onAppear { store.refresh() }
+        .onAppear {
+            store.refresh()
+            AlarmRinger.cancelAll()
+            Task { await AlarmRinger.authorize() }
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { store.refresh() }
+            switch phase {
+            case .active:
+                // Opening the app is what silences it.
+                store.refresh()
+                AlarmRinger.cancelAll()
+            case .background:
+                // Leaving: ring again later if anything is still unanswered or unpaid,
+                // and at the next question times.
+                let plan = store.alarmPlan()
+                let bg = UIApplication.shared.beginBackgroundTask()   // finish before iOS suspends us
+                Task {
+                    await AlarmRinger.schedule(plan)
+                    UIApplication.shared.endBackgroundTask(bg)
+                }
+            default:
+                break
+            }
         }
         .onReceive(ticker) { _ in store.refresh() }
     }

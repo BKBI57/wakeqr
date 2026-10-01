@@ -43,10 +43,10 @@ struct PayView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.green)
-                    .disabled(!Store.matches(typed, Store.paidSentence))
+                    .disabled(!Store.isPaidSentence(typed))
                 }
 
-                Text("الإشعارات رح تضل توصلك كل ربع ساعة لحتى تكتب إنك دفعت.")
+                Text("التلفون رح يضل يرن كل ٥ دقايق لحتى تكتب إنك حولت المبلغ.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

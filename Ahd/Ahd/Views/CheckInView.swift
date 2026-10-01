@@ -49,13 +49,13 @@ struct CheckInView: View {
                             SentenceField(sentence: Store.cleanSentence, text: Binding(
                                 get: { typed[habit.id] ?? "" },
                                 set: { typed[habit.id] = $0 }))
-                            if habit.step > 0 {
-                                Text("المبلغ بيصير \(habit.current + habit.step) دينار 📈")
-                                    .font(.footnote.bold())
-                                    .foregroundStyle(.green)
-                            }
+                            Text("المبلغ بيضل \(habit.current) دينار 👍")
+                                .font(.footnote.bold())
+                                .foregroundStyle(.green)
                         } else if answers[habit.id] == true {
-                            Text("رح يصير عليك \(habit.current) دينار لـ\(store.partnerName)")
+                            Text(habit.step > 0
+                                 ? "رح يصير عليك \(habit.current) دينار لـ\(store.partnerName)، والمرة الجاية بتصير \(habit.current + habit.step)"
+                                 : "رح يصير عليك \(habit.current) دينار لـ\(store.partnerName)")
                                 .font(.footnote.bold())
                                 .foregroundStyle(.red)
                         }

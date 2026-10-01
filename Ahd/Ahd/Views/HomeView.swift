@@ -19,7 +19,7 @@ struct HomeView: View {
                                     .font(.title3.bold())
                             }
                             Text(habit.step > 0
-                                 ? "لو عملتها، هاد يلي رح تدفعه لـ\(store.partnerName). بكرا بيصير \(habit.current + habit.step)."
+                                 ? "لو عملتها، هاد يلي رح تدفعه لـ\(store.partnerName)، والمرة يلي بعدها بتصير \(habit.current + habit.step)."
                                  : "مبلغ ثابت، بتدفعه لـ\(store.partnerName) إذا عملتها.")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)

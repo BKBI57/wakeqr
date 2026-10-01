@@ -1,8 +1,8 @@
 import Foundation
 import SwiftUI
 
-/// One pledge. `current` is what slipping would cost right now: it starts at `start`, grows by
-/// `step` for every day answered "I didn't", and goes back to `start` after a slip.
+/// One pledge. `current` is what the next slip costs: it starts at `start`, and every slip is
+/// paid at the current price and makes the next one `step` dearer. Clean days leave it alone.
 /// A `step` of 0 makes it a fixed amount.
 struct Habit: Codable, Identifiable, Equatable {
     var id: Int
@@ -42,7 +42,13 @@ final class Store: ObservableObject {
     /// Must be typed by hand to answer "no" — a tap is too easy to lie with.
     nonisolated static let cleanSentence = "والله لم أفعلها"
     /// Must be typed by hand to clear a debt.
-    nonisolated static let paidSentence = "والله دفعت المبلغ"
+    nonisolated static let paidSentence = "والله حولت المبلغ"
+    /// Also accepted for clearing a debt.
+    nonisolated static let paidSentenceAlt = "والله دفعت المبلغ"
+
+    nonisolated static func isPaidSentence(_ typed: String) -> Bool {
+        matches(typed, paidSentence) || matches(typed, paidSentenceAlt)
+    }
 
     @Published private(set) var state: AhdState {
         didSet {
@@ -119,6 +125,39 @@ final class Store: ObservableObject {
         ["الأحد", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"][(weekday - 1 + 7) % 7]
     }
 
+    /// Alarms to set when the app goes to the background (it is cancelled whenever Ahd is opened):
+    /// a debt rings every 5 minutes, unanswered questions every 3, and each upcoming question
+    /// time rings every 3 minutes for 45 minutes.
+    func alarmPlan(from start: Date = Date()) -> [(date: Date, title: String)] {
+        var items: [(date: Date, title: String)] = []
+        if totalOwed > 0 {
+            for k in 0..<24 {
+                items.append((start.addingTimeInterval(120 + Double(k) * 300),
+                              "عليك \(totalOwed) دينار لـ\(partnerName) 💸 افتح عهد"))
+            }
+        } else if pendingDay != nil {
+            for k in 0..<15 {
+                items.append((start.addingTimeInterval(120 + Double(k) * 180),
+                              "لسا ما جاوبت على أسئلة عهد 🤝"))
+            }
+        }
+        // The next two question times still ahead.
+        if var next = nextCheckDate {
+            var added = 0
+            while added < 2 {
+                if next > start {
+                    for k in 0..<15 {
+                        items.append((next.addingTimeInterval(Double(k) * 180), "وقت العهد 🤝 افتح عهد وجاوب"))
+                    }
+                    added += 1
+                }
+                guard let following = cal.date(byAdding: .day, value: 1, to: next) else { break }
+                next = following
+            }
+        }
+        return items
+    }
+
     func dayLabel(_ day: Date) -> String {
         if cal.isDateInToday(day) { return "اليوم" }
         if cal.isDateInYesterday(day) { return "مبارح" }
@@ -146,10 +185,9 @@ final class Store: ObservableObject {
             guard asked.contains(id) else { continue }   // allowed day: nothing changes
             if didIt[id] == true {
                 s.habits[i].owed += s.habits[i].current
-                s.habits[i].current = s.habits[i].start
+                s.habits[i].current += s.habits[i].step
                 s.habits[i].cleanDays = 0
             } else {
-                s.habits[i].current += s.habits[i].step
                 s.habits[i].cleanDays += 1
             }
         }
