@@ -8,11 +8,14 @@ import ActivityKit
 @main
 struct AhdWidgetBundle: WidgetBundle {
     var body: some Widget {
-        AhdAlarmLiveActivity()
+        if #available(iOS 26.0, *) {
+            AhdAlarmLiveActivity()
+        }
     }
 }
 
 /// The Live Activity AlarmKit uses to present Ahd's alarms (lock screen + Dynamic Island).
+@available(iOS 26.0, *)
 struct AhdAlarmLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: AlarmAttributes<AhdAlarmMetadata>.self) { _ in

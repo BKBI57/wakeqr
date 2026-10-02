@@ -19,7 +19,10 @@ enum AlarmKitBridge {
     @MainActor
     static func cancel() async {
         guard let s = UserDefaults.standard.string(forKey: idKey), let id = UUID(uuidString: s) else { return }
-        try? AlarmManager.shared.cancel(id: id)
+        // AlarmKit exists only on iOS 26+; older phones never had an alarm to clean up.
+        if #available(iOS 26.0, *) {
+            try? AlarmManager.shared.cancel(id: id)
+        }
         UserDefaults.standard.removeObject(forKey: idKey)
     }
 }

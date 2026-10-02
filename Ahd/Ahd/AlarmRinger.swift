@@ -10,6 +10,7 @@ import AlarmKit
 /// the chain; leaving with something unanswered or unpaid starts a new one.
 /// Every alarm is one-shot and its id is stored, so nothing outlives a reschedule (the daily
 /// repeating alarm that leaked in WakeQR v1 is exactly what this avoids).
+/// AlarmKit is iOS 26+; on older phones these do nothing and the local notifications remain.
 enum AlarmRinger {
 
     private static let idsKey = "ahdAlarmIDs"
@@ -19,6 +20,7 @@ enum AlarmRinger {
     /// Asks for permission. Call while the app is on screen — the prompt can't show from the background.
     @MainActor
     static func authorize() async {
+        guard #available(iOS 26.0, *) else { return }
         if AlarmManager.shared.authorizationState == .notDetermined {
             _ = try? await AlarmManager.shared.requestAuthorization()
         }
@@ -27,6 +29,7 @@ enum AlarmRinger {
     @MainActor
     static func cancelAll() {
         generation += 1
+        guard #available(iOS 26.0, *) else { return }
         for s in UserDefaults.standard.stringArray(forKey: idsKey) ?? [] {
             if let id = UUID(uuidString: s) { try? AlarmManager.shared.cancel(id: id) }
         }
@@ -37,7 +40,8 @@ enum AlarmRinger {
     static func schedule(_ items: [(date: Date, title: String)]) async {
         cancelAll()
         let gen = generation
-        guard AlarmManager.shared.authorizationState == .authorized else { return }
+        guard #available(iOS 26.0, *),
+              AlarmManager.shared.authorizationState == .authorized else { return }
 
         var ids: [String] = []
         for item in items where item.date > Date() {
