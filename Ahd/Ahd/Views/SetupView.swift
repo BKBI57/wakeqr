@@ -7,7 +7,7 @@ struct SetupView: View {
         Habit(id: 1, title: "العهد الأول", start: 5, step: 2, current: 5),
         Habit(id: 2, title: "الأكل الجاهز من برّا", start: 1, step: 0, current: 1, allowedWeekday: 2),
     ]
-    @State private var checkHour = 21
+    @State private var checkHour = 22
 
     var body: some View {
         NavigationStack {

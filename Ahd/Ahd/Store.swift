@@ -25,7 +25,19 @@ struct AhdState: Codable {
     /// The last day whose questions were answered. Every later day up to today must be answered.
     var lastCheckedDay: Date?
     /// Daily question time (24h).
-    var checkHour: Int = 21
+    var checkHour: Int = 22
+    /// Money log. Optional so states saved before it existed still decode.
+    var entries: [MoneyEntry]?
+}
+
+/// One logged expense or income.
+struct MoneyEntry: Codable, Identifiable, Equatable {
+    var id = UUID()
+    var date: Date
+    var amount: Double
+    var isIncome: Bool
+    /// Expense category id (see Store.categories); nil for income.
+    var category: String?
 }
 
 @MainActor
@@ -215,6 +227,45 @@ final class Store: ObservableObject {
         s.checkHour = checkHour
         s.me = me
         state = s
+    }
+
+    // MARK: - Money log
+
+    nonisolated static let categories: [(id: String, name: String, icon: String)] = [
+        ("food", "أكل", "🍔"),
+        ("transport", "مواصلات", "🚕"),
+        ("work", "شغل", "💼"),
+    ]
+    nonisolated static func categoryLabel(_ id: String?) -> String {
+        guard let c = categories.first(where: { $0.id == id }) else { return "مصروف" }
+        return "\(c.icon) \(c.name)"
+    }
+
+    var entries: [MoneyEntry] { (state.entries ?? []).sorted { $0.date > $1.date } }
+
+    func addEntry(amount: Double, isIncome: Bool, category: String?) {
+        var s = state
+        s.entries = (s.entries ?? []) + [MoneyEntry(date: Date(), amount: amount, isIncome: isIncome,
+                                                     category: isIncome ? nil : category)]
+        state = s
+    }
+
+    func deleteEntry(_ id: UUID) {
+        var s = state
+        s.entries?.removeAll { $0.id == id }
+        state = s
+    }
+
+    var monthEntries: [MoneyEntry] {
+        entries.filter { cal.isDate($0.date, equalTo: now, toGranularity: .month) }
+    }
+    var spentToday: Double {
+        entries.filter { !$0.isIncome && cal.isDateInToday($0.date) }.reduce(0) { $0 + $1.amount }
+    }
+    var spentThisMonth: Double { monthEntries.filter { !$0.isIncome }.reduce(0) { $0 + $1.amount } }
+    var incomeThisMonth: Double { monthEntries.filter(\.isIncome).reduce(0) { $0 + $1.amount } }
+    func spentThisMonth(in category: String) -> Double {
+        monthEntries.filter { !$0.isIncome && $0.category == category }.reduce(0) { $0 + $1.amount }
     }
 
     // MARK: - Typed-sentence check

@@ -8,6 +8,23 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    NavigationLink {
+                        MoneyView()
+                    } label: {
+                        Card {
+                            HStack {
+                                Text("💰 مصاريفي").font(.headline)
+                                Spacer()
+                                Text("اليوم: \(money(store.spentToday))")
+                                    .font(.subheadline.bold())
+                            }
+                            Text("هالشهر صرفت \(money(store.spentThisMonth)) ودخلك \(money(store.incomeThisMonth))")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
                     ForEach(store.habits) { habit in
                         Card {
                             Text(habit.title)
@@ -62,7 +79,7 @@ struct SettingsView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
     @State private var habits: [Habit] = []
-    @State private var checkHour = 21
+    @State private var checkHour = 22
     @State private var me = "barakat"
 
     var body: some View {
